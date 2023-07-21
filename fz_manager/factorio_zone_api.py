@@ -3,7 +3,7 @@ import json
 import re
 import ssl
 from inspect import iscoroutinefunction
-from typing import Callable, Coroutine, Union
+from typing import Callable, Coroutine, Dict, Union
 
 import requests
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
@@ -37,6 +37,7 @@ class FZClient:
         self.server_status = ServerStatus.OFFLINE
         self.logs_map = {}
         self.logs_listeners: list[Callable[[str], Union[Coroutine, Callable]]] = []
+        self.message_listeners: list[Callable[[Dict[str, str]], Union[Coroutine, Callable]]] = []
         self.mods_sync = False
         self.saves_sync = False
 
@@ -104,6 +105,8 @@ class FZClient:
             elif data['type'] == 'error':
                 pass
 
+            await self.on_new_message(data)
+
     async def wait_sync(self):
         while not self.mods_sync or not self.saves_sync:
             await asyncio.sleep(1)
@@ -120,6 +123,19 @@ class FZClient:
                 await listener(log)
             else:
                 listener(log)
+
+    def add_message_listener(self, listener):
+        self.message_listeners.append(listener)
+
+    def remove_message_listener(self, listener):
+        self.message_listeners.remove(listener)
+
+    async def on_new_message(self, message_data: Dict[str, str]):
+        for listener in self.message_listeners:
+            if iscoroutinefunction(listener):
+                await listener(message_data)
+            else:
+                listener(message_data)
 
     # ------ USER APIs ------------------------------------------------------------------
     def login(self):
