@@ -3,13 +3,11 @@ import json
 import re
 import ssl
 from inspect import iscoroutinefunction
-from typing import Callable, Coroutine
+from typing import Callable, Coroutine, Union
 
 import requests
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 from websockets import client
-
-from fz_manager.utils import Term
 
 FACTORIO_ZONE_ENDPOINT = 'factorio.zone'
 
@@ -38,7 +36,7 @@ class FZClient:
         self.server_address = None
         self.server_status = ServerStatus.OFFLINE
         self.logs_map = {}
-        self.logs_listeners: list[Callable[[str], Coroutine | Callable]] = []
+        self.logs_listeners: list[Callable[[str], Union[Coroutine, Callable]]] = []
         self.mods_sync = False
         self.saves_sync = False
 
@@ -55,61 +53,56 @@ class FZClient:
         while True:
             message = await self.socket.recv()
             data = json.loads(message)
-            match data['type']:
-                case 'visit':
-                    self.visit_secret = data['secret']
-                    self.login()
-                case 'options':
-                    match data['name']:
-                        case 'regions':
-                            self.regions = data['options']
-                        case 'versions':
-                            self.versions = data['options']
-                        case 'saves':
-                            self.saves = data['options']
-                            self.saves_sync = True
-                case 'mods':
-                    self.mods = data['mods']
-                    self.mods_sync = True
-                case 'idle':
-                    self.running = False
-                    self.launch_id = None
-                    self.server_status = ServerStatus.OFFLINE
-                    self.server_address = None
-                case "starting":
-                    self.running = True
-                    self.launch_id = data.get('launchId')
+
+            if data['type'] == 'visit':
+                self.visit_secret = data['secret']
+                self.login()
+            elif data['type'] == 'options':
+                if data['name'] == 'regions':
+                    self.regions = data['options']
+                elif data['name'] == 'versions':
+                    self.versions = data['options']
+                elif data['name'] == 'saves':
+                    self.saves = data['options']
+                    self.saves_sync = True
+            elif data['type'] == 'mods':
+                self.mods = data['mods']
+                self.mods_sync = True
+            elif data['type'] == 'idle':
+                self.running = False
+                self.launch_id = None
+                self.server_status = ServerStatus.OFFLINE
+                self.server_address = None
+            elif data['type'] == 'starting':
+                self.running = True
+                self.launch_id = data.get('launchId')
+                self.server_status = ServerStatus.STARTING
+            elif data['type'] == 'stopping':
+                self.running = True
+                self.launch_id = data.get('launchId')
+                self.server_status = ServerStatus.STOPPING
+            elif data['type'] == 'running':
+                self.running = True
+                self.launch_id = data.get('launchId')
+                self.server_address = data.get('socket')
+                self.server_status = ServerStatus.RUNNING
+            elif data['type'] == 'slot':
+                self.slots[data['slot']] = data
+            elif data['type'] == 'log':
+                log_id = data['num']
+                if log_id not in self.logs_map:
+                    log = data.get('line')
+                    self.logs_map[log_id] = log_id
+                    await self.on_new_log(log)
+            elif data['type'] == 'info':
+                line = data.get('line')
+                if len(match := re.findall('selecting connection (\d+\.\d+\.\d+\.\d+:\d+)', line)):
+                    self.server_address = match[0]
                     self.server_status = ServerStatus.STARTING
-                case "stopping":
-                    self.running = True
-                    self.launch_id = data.get('launchId')
-                    self.server_status = ServerStatus.STOPPING
-                case 'running':
-                    self.running = True
-                    self.launch_id = data.get('launchId')
-                    self.server_address = data.get('socket')
-                    self.server_status = ServerStatus.RUNNING
-                case 'slot':
-                    self.slots[data['slot']] = data
-                case 'log':
-                    log_id = data['num']
-                    if log_id not in self.logs_map:
-                        log = data.get('line')
-                        self.logs_map[log_id] = log_id
-                        await self.on_new_log(log)
-                case 'info':
-                    line = data.get('line')
-                    if len(match := re.findall('selecting connection (\d+\.\d+\.\d+\.\d+:\d+)', line)):
-                        self.server_address = match[0]
-                        self.server_status = ServerStatus.STARTING
-                    log = Term.info('info', line)
-                    await self.on_new_log(log)
-                case 'warn':
-                    log = Term.warn('warn', data.get('line'))
-                    await self.on_new_log(log)
-                case 'error':
-                    log = Term.error('error', data.get('line'))
-                    await self.on_new_log(log)
+            elif data['type'] == 'warn':
+                pass
+            elif data['type'] == 'error':
+                pass
 
     async def wait_sync(self):
         while not self.mods_sync or not self.saves_sync:
