@@ -35,7 +35,6 @@ class FZClient:
         self.region = None
         self.server_address = None
         self.server_status = ServerStatus.OFFLINE
-        self.logs_map = {}
         self.logs_listeners: list[Callable[[str], Union[Coroutine, Callable]]] = []
         self.message_listeners: list[Callable[[Dict[str, str]], Union[Coroutine, Callable]]] = []
         self.mods_sync = False
@@ -90,11 +89,8 @@ class FZClient:
             elif data['type'] == 'slot':
                 self.slots[data['slot']] = data
             elif data['type'] == 'log':
-                log_id = data['num']
-                if log_id not in self.logs_map:
-                    log = data.get('line')
-                    self.logs_map[log_id] = log_id
-                    await self.on_new_log(log)
+                log = data.get('line')
+                await self.on_new_log(log)
             elif data['type'] == 'info':
                 line = data.get('line')
                 if len(match := re.findall('selecting connection (\d+\.\d+\.\d+\.\d+:\d+)', line)):
