@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import re
 import ssl
 from inspect import iscoroutinefunction
@@ -50,6 +51,7 @@ class FZClient:
             ping_timeout=10,
             ssl=ssl_context
         )
+        logging.info("Connection to Factorio.zone established")
         while True:
             message = await self.socket.recv()
             data = json.loads(message)
