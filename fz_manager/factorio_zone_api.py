@@ -25,7 +25,6 @@ class FZClient:
         self.socket = None
         self.user_token = token
         self.visit_secret = None
-        self.referrer_code = None
         self.regions = {}
         self.versions = {}
         self.slots = {}
@@ -147,7 +146,6 @@ class FZClient:
         if resp.ok:
             body = resp.json()
             self.user_token = body['userToken']
-            self.referrer_code = body['referralCode']
         else:
             raise Exception(f'Error logging in: {resp.text}')
 
