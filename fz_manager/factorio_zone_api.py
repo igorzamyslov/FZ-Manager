@@ -274,14 +274,15 @@ class FZClient:
         if resp.status_code != 200:
             raise Exception(f'Error sending console command: {resp.text}')
 
-    def start_instance(self, region, version, save):
+    def start_instance(self, region, version, save, ipv6=True):
         resp = requests.post(
             url=f'https://{FACTORIO_ZONE_ENDPOINT}/api/instance/start',
             data={
                 'visitSecret': self.visit_secret,
                 'region': region,
                 'version': version,
-                'save': save
+                'save': save,
+                'ipv6': ipv6,
             })
         if resp.status_code != 200:
             raise Exception(f'Error starting instance: {resp.text}')
