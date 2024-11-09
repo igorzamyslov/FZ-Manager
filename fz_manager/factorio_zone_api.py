@@ -39,6 +39,7 @@ class FZClient:
         self.message_listeners: list[Callable[[Dict[str, str]], Union[Coroutine, Callable]]] = []
         self.mods_sync = False
         self.saves_sync = False
+        self.last_handled_message_num = -1
 
     async def connect(self):
         ssl_context = ssl.SSLContext()
@@ -54,6 +55,12 @@ class FZClient:
         while True:
             message = await self.socket.recv()
             data = json.loads(message)
+
+            current_num = data.get('num')
+            if current_num:
+                if current_num <= self.last_handled_message_num:
+                    continue
+                self.last_handled_message_num = current_num
 
             if data['type'] == 'visit':
                 self.visit_secret = data['secret']
@@ -73,6 +80,7 @@ class FZClient:
                 self.running = False
                 self.launch_id = None
                 self.server_status = ServerStatus.OFFLINE
+                self.last_handled_message_num = -1
                 self.server_address = None
             elif data['type'] == 'starting':
                 self.running = True
